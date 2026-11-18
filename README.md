@@ -167,7 +167,7 @@ Un GPU n'est pas obligatoire
 1. Télécharger FER-2013 (version avec dossiers `train/` et `test/`) depuis Kaggle et placer l'archive à la racine du dépôt .
 2. Ouvrir le notebook :
    ```bash
-   jupyter notebook facial_emotion_recognition-quatre_modele.ipynb
+   jupyter notebook Facial_emotion_recognition_modele.ipynb
    ```
 3. Dans la 2ᵉ cellule, adapter la variable `chemin_zip` au nom réel de l'archive (par défaut `archive(1).zip`).
 4. Exécuter les cellules dans l'ordre (*Run All*). Le notebook :
