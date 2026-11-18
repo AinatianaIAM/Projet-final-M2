@@ -183,58 +183,121 @@ Un GPU n'est pas obligatoire
 Il est également possible d'exécuter le notebook sur **Google Colab**.
 
 ## 7. Résultats
-#### Résultats expérimentaux
 
-Les résultats obtenus sur le jeu de test sont les suivants :
+### 7.1. Résultats expérimentaux
+
+Après l'entraînement des quatre modèles, nous avons évalué leurs performances sur le dataset FER-2013. Les résultats obtenus sont présentés dans le tableau suivant.
 
 | Modèle | Accuracy | Macro F1 | Weighted F1 |
 |--------|---------:|---------:|------------:|
-| CNN Baseline | 0,485 | 0,389 | 0,460 |
-| **CNN Attention** | **0,516** | **0,426** | **0,485** |
-| Tiny ViT | 0,360 | 0,273 | 0,328 |
-| CNN-APP-Transformer | 0,451 | 0,371 | 0,437 |
+| CNN Baseline | 0,432 | 0,335 | 0,402 |
+| CNN Attention | 0,457 | 0,345 | 0,412 |
+| Tiny ViT | 0,379 | 0,294 | 0,353 |
+| **CNN-APP-Transformer** | **0,483** | **0,392** | **0,452** |
 
-**F1-score par émotion :**
+Le CNN-APP-Transformer obtient les meilleurs résultats sur les trois métriques globales, avec une accuracy de 48,3 % et un Macro F1 de 0,392. Il est suivi par le CNN avec attention spatiale, puis par le CNN de base.
 
-| Émotion | CNN Baseline | CNN Attention | Tiny ViT | CNN-APP-Transformer |
-|---------|-------------:|--------------:|---------:|--------------------:|
-| angry    | 0,35 | **0,42** | 0,23 | 0,34 |
-| disgust  | 0,05 | **0,19** | 0,00 | 0,03 |
-| fear     | 0,17 | 0,10 | 0,11 | **0,20** |
-| happy    | 0,72 | **0,75** | 0,52 | 0,67 |
-| neutral  | 0,47 | **0,51** | 0,28 | 0,36 |
-| sad      | 0,31 | **0,37** | 0,29 | 0,35 |
-| surprise | **0,65** | **0,65** | 0,49 | **0,65** |
+Le Tiny ViT obtient les résultats les plus faibles. Il atteint une accuracy de 37,9 %, ce qui montre qu'il rencontre davantage de difficultés à reconnaître les expressions faciales dans notre configuration expérimentale.
 
+Ces résultats montrent que les performances varient selon l'architecture utilisée. En particulier, le modèle hybride qui combine un CNN et un Transformer obtient les meilleurs résultats parmi les quatre modèles testés.
 
-Le CNN-APP-Transformer obtient les meilleurs résultats sur les trois métriques globales dans cette expérience.
-Le CNN avec attention spatiale n'améliore pas les performances globales par rapport au CNN de base.
-Le Tiny ViT présente les résultats les plus faibles des quatre modèles dans cette configuration expérimentale.
-Ces résultats suggèrent que la combinaison d'une extraction convolutionnelle locale et d'une sélection attentive des patches peut être intéressante pour cette tâche.
+Nous avons également comparé les résultats pour chaque émotion afin de mieux comprendre les points forts et les difficultés des modèles.
 
-Ils ne démontrent cependant pas que cette approche est systématiquement supérieure aux autres architectures.
+**F1-score pour chaque émotion :**
 
-### Analyse
-- **Le CNN avec attention spatiale est le meilleur modèle** sur toutes les métriques globales (+3 points d'accuracy et +4 points de macro-F1 face au CNN de base). Cette amélioration est modeste et provient d'une seule exécution par modèle : elle doit être interprétée comme une tendance, pas comme une différence statistiquement établie.
-- **Le Tiny ViT est nettement le moins performant.** Ce résultat est cohérent avec la littérature : les Transformers manquent de biais inductif (localité, invariance par translation) et demandent beaucoup de données ou un pré-entraînement. Avec ~23 000 images de 48 × 48, 10 époques et aucun pré-entraînement, il apprend peu.
-- **L'ajout de la convolution avant le Transformer aide** : le CNN-APP-Transformer gagne environ 9 points d'accuracy par rapport au Tiny ViT, ce qui confirme l'intérêt d'un backbone convolutif pour extraire des caractéristiques locales. Il reste toutefois en dessous des deux CNN, ce qui peut s'expliquer par notre version simplifiée de la sélection de patchs et par un entraînement très court.
-- **Les classes rares et ambiguës restent difficiles pour tous les modèles.** `disgust` (111 images de test) est quasiment jamais reconnue malgré la pondération des classes, et `fear` obtient un rappel très faible (5 à 15 %) : elle est souvent confondue avec `sad`, `angry` ou `neutral`. À l'inverse, `happy` et `surprise`, visuellement distinctives, atteignent les meilleurs scores.
-- **Biais vers `neutral` pour les CNN** : la classe `neutral` a un rappel élevé (≈ 0,70) mais une précision faible (≈ 0,35 à 0,40), ce qui indique que les modèles la prédisent par défaut en cas d'incertitude.
-- Le **macro-F1** est nettement plus bas que l'accuracy pour tous les modèles : l'accuracy seule masque l'échec sur les classes minoritaires.
-### Limites
-Plusieurs limites doivent être prises en compte :
+| Émotion | CNN Attention | CNN Baseline | CNN-APP-Transformer | Tiny ViT |
+|---------|--------------:|-------------:|--------------------:|---------:|
+| angry | 0,285 | 0,290 | **0,342** | 0,278 |
+| disgust | 0,018 | 0,000 | **0,103** | 0,000 |
+| fear | 0,117 | 0,166 | **0,186** | 0,119 |
+| happy | 0,650 | 0,668 | **0,679** | 0,557 |
+| neutral | 0,459 | 0,436 | **0,462** | 0,310 |
+| sad | 0,248 | 0,159 | **0,329** | 0,271 |
+| surprise | 0,641 | 0,624 | **0,642** | 0,525 |
 
-- Les images FER-2013 ont une résolution relativement faible.
-- Le dataset présente un déséquilibre entre les classes.
-- Certaines expressions sont visuellement proches.
-- Les modèles sont entraînés depuis zéro, sans pré-entraînement externe.
-- Les ressources matérielles sont limitées et l'entraînement est effectué localement sans GPU.
-- Le Tiny ViT est volontairement réduit et entraîné pendant un nombre limité d'époques.
-- Le quatrième modèle est une adaptation simplifiée d'APP et ne reproduit pas l'ensemble de l'architecture APViT.
-- La sélection des patches dans notre APP ne conserve pas explicitement leurs coordonnées spatiales d'origine dans l'encodage positionnel.
-- Les résultats proviennent d'une seule configuration expérimentale et ne constituent pas une comparaison statistique sur plusieurs répétitions.
+Le CNN-APP-Transformer obtient le meilleur F1-score pour les sept émotions. Son avantage est particulièrement visible pour 'disgust' et 'sad', deux classes qui sont difficiles à reconnaître pour les autres modèles.
 
-### Améliorations
-- Augmenter le nombre d'époques et ajuster les hyperparamètres ;
-- remplacer le critère d'importance des patchs par un score d'attention appris, comme dans l'article de Xue et al. ;
-- utiliser un pré-entraînement ou des architectures plus profondes ;
+L'émotion 'happy' obtient de bons résultats avec tous les modèles, tandis que *surprise* est également assez bien reconnue. À l'inverse, 'disgust' reste la classe la plus difficile, même si le CNN-APP-Transformer obtient un meilleur score que les autres modèles.
+
+### 7.2. Analyse des résultats
+
+La comparaison des quatre modèles permet de faire plusieurs observations.
+
+**Le CNN-APP-Transformer obtient les meilleurs résultats globaux.**
+
+Avec une accuracy de 48,3 %, un Macro F1 de 0,392 et un Weighted F1 de 0,452, il arrive en première position sur les trois métriques.
+
+Il obtient également le meilleur F1-score pour chacune des sept émotions. Cette observation est intéressante, car elle montre que son avantage ne concerne pas seulement les classes les plus représentées dans le jeu de données.
+
+Ces résultats suggèrent que l'association d'un réseau convolutionnel et d'une sélection attentive des patches peut être utile pour la reconnaissance des expressions faciales. Le CNN extrait d'abord des caractéristiques locales du visage, puis le mécanisme APP sélectionne les patches considérés comme les plus importants avant leur traitement par le Transformer.
+
+Cependant, ces résultats ne prouvent pas que cette architecture est toujours supérieure aux autres. Ils montrent seulement qu'elle est la plus performante parmi les modèles et dans les conditions de notre expérience.
+
+**Le CNN avec attention spatiale améliore légèrement le CNN de base.**
+
+Le CNN avec attention spatiale atteint une accuracy de 45,7 %, contre 43,2 % pour le CNN de base. Son Macro F1 passe de 0,335 à 0,345.
+
+Cette amélioration reste limitée, mais elle suggère que l'attention spatiale peut aider le modèle à mieux exploiter certaines zones du visage.
+
+Cependant, les résultats par émotion montrent que cette amélioration n'est pas présente pour toutes les classes. Par exemple, le CNN de base obtient un meilleur score pour angry, fear et happy. L'attention spatiale apporte donc un gain global modeste, mais son effet varie selon l'émotion à reconnaître.
+
+**Le Tiny ViT obtient les résultats les plus faibles.**
+
+Le Tiny ViT atteint une accuracy de 37,9 % et un Macro F1 de 0,294. Il est moins performant que les trois autres modèles dans notre expérience.
+
+Ce résultat peut être lié aux conditions d'entraînement. Le modèle est entraîné à partir de zéro, sans pré-entraînement, sur des images de petite taille (48 × 48 pixels) et avec un nombre limité d'époques.
+
+Contrairement aux CNN, les Transformers ne disposent pas naturellement des mêmes mécanismes pour détecter les caractéristiques locales d'une image. Ils peuvent avoir besoin de davantage de données ou d'un pré-entraînement pour apprendre des représentations efficaces.
+
+Cela ne signifie pas que les Transformers sont moins performants que les CNN en général. Cela indique plutôt que celui de notre expérience n'a pas obtenu des résultats aussi satisfaisants.
+
+**La combinaison d'un CNN et d'un Transformer semble intéressante.**
+
+Le CNN-APP-Transformer obtient une accuracy de 48,3 %, contre 37,9 % pour le Tiny ViT. Cette différence montre que l'ajout d'une étape d'extraction de caractéristiques par un CNN peut être bénéfique avant le traitement des patches par un Transformer.
+
+Le CNN aide à extraire les informations locales du visage. Ensuite, le mécanisme APP sélectionne une partie des patches afin de privilégier ceux qui semblent les plus importants pour la reconnaissance.
+
+Dans notre expérience, cette combinaison donne de meilleurs résultats que l'utilisation du Tiny ViT seul. Il faut toutefois rappeler que notre modèle est une adaptation simplifiée du mécanisme APP présenté par Xue et al. Il ne reproduit pas toute l'architecture APViT.
+
+**Certaines émotions restent difficiles à reconnaître.**
+
+Les résultats par émotion montrent que 'happy' et 'surprise' sont relativement bien reconnues par les quatre modèles. En revanche, 'disgust' reste particulièrement difficile.
+
+Le CNN-APP-Transformer améliore le F1-score de 'disgust' à 0,103, alors que les autres modèles obtiennent des scores très faibles, voire nuls. Malgré cette amélioration, le résultat reste faible.
+
+Cette difficulté peut notamment être liée au faible nombre d'images disponibles pour cette émotion. Le déséquilibre des classes peut empêcher les modèles d'apprendre suffisamment de caractéristiques pour reconnaître correctement les émotions les moins représentées.
+
+La classe "fear" reste également difficile, avec des F1-scores compris entre 0,117 et 0,186. Certaines expressions faciales peuvent être visuellement proches, ce qui rend leur distinction plus compliquée.
+
+Enfin, le Macro F1 est inférieur à l'accuracy pour tous les modèles. Cela montre que les performances sont moins bonnes lorsque chaque émotion reçoit la même importance dans le calcul du score. L'accuracy seule ne suffit donc pas pour évaluer correctement les modèles sur un dataset déséquilibré.
+
+### 7.3. Limites de l'expérience
+
+Plusieurs limites doivent être prises en compte pour interpréter les résultats.
+
+- **La résolution des images :** les images FER-2013 ont une taille de 48 × 48 pixels. Certains détails du visage peuvent donc être difficiles à distinguer.
+- **Le déséquilibre des classes :** certaines émotions, notamment 'disgust', sont beaucoup moins représentées que d'autres.
+- **La proximité entre les expressions :** certaines émotions présentent des caractéristiques faciales similaires, ce qui peut provoquer des confusions.
+- **L'absence de pré-entraînement :** les quatre modèles sont entraînés à partir de zéro, sans utiliser de poids appris sur un autre jeu de données.
+- **Les ressources matérielles :** les expériences sont réalisées localement, sans GPU. Cela limite le temps et les possibilités d'entraînement.
+- **La durée d'entraînement :** le nombre d'epoch reste limité. Les modèles n'ont donc peut-être pas atteint leur meilleur niveau de performance.
+- **La simplification du CNN-APP-Transformer :** notre quatrième modèle reprend le principe de sélection attentive des patches, mais ne reproduit pas tous les éléments de l'architecture APViT proposée par Xue et al.
+
+### 7.4. Améliorations possibles
+
+Plusieurs pistes pourraient être étudiées pour améliorer les résultats.
+
+- **Augmenter le nombre d'epoch :** entraîner les modèles plus longtemps pourrait leur permettre d'apprendre des caractéristiques plus précises, tout en surveillant le risque de surapprentissage.
+- **Ajuster les hyperparamètres :** tester différents taux d'apprentissage, tailles de batch et paramètres d'architecture pourrait améliorer les performances.
+- **Utiliser un modèle pré-entraîné :** partir d'un réseau déjà entraîné sur un grand jeu d'images pourrait faciliter l'apprentissage, notamment pour le Transformer.
+- **Répéter les expériences :** entraîner chaque modèle plusieurs fois avec différentes initialisations permettrait de vérifier si les différences observées sont stables.
+- **Mieux traiter les classes minoritaires :** tester d'autres méthodes de pondération ou d'augmentation des données pourrait améliorer la reconnaissance des émotions les moins représentées.
+
+### 7.5. Bilan des résultats
+
+Dans cette expérience, le CNN-APP-Transformer obtient les meilleures performances globales et les meilleurs F1-scores pour les sept émotions. Ces résultats suggèrent que l'association d'une extraction de caractéristiques par CNN et d'une sélection attentive des patches avant le Transformer est une piste intéressante pour la reconnaissance des expressions faciales.
+
+Le CNN avec attention spatiale améliore légèrement les résultats du CNN de base, mais cet avantage reste limité et varie selon les émotions. Le Tiny ViT obtient les résultats les plus faibles dans notre configuration expérimentale.
+
+La principale conclusion est donc que **le CNN-APP-Transformer est le modèle le plus performant parmi les quatre architectures testées dans cette expérience**. Toutefois, des entraînements plus longs, plusieurs répétitions et une implémentation plus complète du mécanisme APP seraient nécessaires pour confirmer la stabilité de cet avantage.
+
