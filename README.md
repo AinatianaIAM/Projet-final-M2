@@ -27,163 +27,129 @@ On ne cherche pas à égaler l'état de l'art des articles mais à en comprendre
 ## 3. Données
 Le projet utilise le dataset FER-2013, disponible sur Kaggle :
 https://www.kaggle.com/datasets/msambare/fer2013
+
 Le dataset contient des images faciales en niveaux de gris, de résolution 48 × 48 pixels, réparties en sept catégories : 'angry', 'disgust', 'fear', 'happy'; 'neutral', 'sad', 'suprise'.
 
 Le dataset présente un déséquilibre important entre les catégories. Par exemple, la classe Disgust est moins représentée que Happy.
 Pour limiter l'influence de ce déséquilibre, des poids de classes sont calculés à partir des effectifs de l'ensemble d'entraînement.
 ## 4. Méthode
-### 4.1 Prétraitement et protocole
+### 4.1. Préparation des données et protocole expérimental
+Pour réaliser cette expérience, nous utilisons le dataset FER-2013, composé d'images de visages en niveaux de gris de taille 48 × 48 pixels. Chaque image appartient à l'une des sept catégories d'émotions.
 
-- Chargement avec `image_dataset_from_directory` (niveaux de gris, 48 × 48, batch de 32).
-- Normalisation des pixels dans [0, 1] (`Rescaling(1/255)`).
-- **Séparation 80 % / 20 %** du dossier `train/` en entraînement et validation (`seed=42`). Le dossier `test/` n'est utilisé **que pour l'évaluation finale**.
-- **Augmentation de données** (dans le modèle) : flip horizontal, rotation (±5 %), zoom (8 %).
-- **Pondération des classes** adoucie (racine carrée de l'inverse de la fréquence, puis normalisée) pour compenser le déséquilibre sans poids extrêmes (`disgust` ≈ 2,4 ; `happy` ≈ 0,6).
-- Optimiseur Adam (lr = 5·10⁻⁴), perte `sparse_categorical_crossentropy`, **10 epochs maximum**, `EarlyStopping` (patience 3, restauration des meilleurs poids) et `ReduceLROnPlateau` (facteur 0,5, patience 2).
+Les images sont chargées avec `image_dataset_from_directory`, puis regroupées en lots de 32 images. Les valeurs des pixels sont normalisées entre 0 et 1 afin de faciliter l'apprentissage des modèles.
 
-### 4.2 Fondements théoriques et choix des architectures
+Le dossier d'entraînement est divisé en deux parties : 80 % des images sont utilisées pour entraîner les modèles et 20 % pour vérifier leur capacité à reconnaître des images qu'ils n'ont pas vues pendant l'entraînement. Le dossier de test est conservé séparément et utilisé uniquement pour l'évaluation finale.
 
-#### Réseau de neurones convolutionnel (CNN)
+Pour rendre les modèles moins dépendants des images exactes du jeu d'entraînement, nous appliquons également des transformations aléatoires : retournement horizontal, légère rotation et zoom. Ces transformations augmentent la diversité des exemples présentés aux modèles.
 
-Un CNN (*Convolutional Neural Network*) est un réseau de neurones conçu pour traiter des données structurées sous forme de grilles, notamment les images.
+Le dataset FER-2013 contient davantage d'images pour certaines émotions que pour d'autres. Pour limiter cet effet, nous utilisons une pondération des classes. Les émotions les moins représentées reçoivent un poids plus important pendant l'entraînement. La pondération est adoucie à l'aide de la racine carrée de l'inverse de la fréquence, afin d'éviter d'attribuer des poids excessifs aux classes très rares.
 
-Les couches convolutionnelles utilisent des filtres qui apprennent progressivement à détecter des caractéristiques visuelles :
+L'objectif est ensuite de comparer les quatre architectures dans un cadre expérimental aussi proche que possible. Les modèles sont entraînés séparément avec l'optimiseur Adam, un taux d'apprentissage initial de 0,0005 et la fonction de perte `sparse_categorical_crossentropy`. L'entraînement est limité à 10 époques au maximum.
 
-- contours et textures ;
-- formes locales ;
-- motifs faciaux ;
-- caractéristiques plus complexes associées aux expressions.
+Deux mécanismes permettent d'adapter l'entraînement : `EarlyStopping` arrête celui-ci lorsque les performances de validation ne s'améliorent plus, tandis que `ReduceLROnPlateau` réduit le taux d'apprentissage lorsque la perte de validation cesse de diminuer.
 
-Le CNN est choisi comme modèle de référence car les convolutions sont adaptées à l'extraction de caractéristiques spatiales locales dans les images.
+### 4.2. Choix et construction des architectures
+L'expérience repose sur quatre modèles. Leur comparaison permet d'étudier progressivement différentes façons d'extraire et d'utiliser les informations contenues dans les images faciales.
 
-#### CNN avec attention spatiale
+#### 4.2.1. CNN classique : modèle de référence
+Un réseau de neurones convolutionnel, ou CNN (*Convolutional Neural Network*), est particulièrement adapté au traitement des images. Il apprend à reconnaître des caractéristiques visuelles grâce à des filtres appliqués sur différentes régions de l'image.
 
-Le mécanisme d'attention permet au réseau de pondérer différemment les caractéristiques extraites.
-Dans notre implémentation, une convolution 1 × 1 suivie d'une fonction sigmoïde produit une carte d'attention spatiale.
-Cette carte est multipliée par les caractéristiques du CNN :
-\[
-F_{att}=F \odot A
-\]
-où :
+Dans le cas des expressions faciales, ces caractéristiques peuvent correspondre aux contours des yeux, à la forme de la bouche, aux sourcils ou encore aux plis du visage. En combinant ces informations, le réseau apprend à distinguer les différentes émotions.
 
-- \(F\) représente les cartes de caractéristiques ;
-- \(A\) représente la carte d'attention ;
-- \(\odot\) représente la multiplication élément par élément.
+Nous avons choisi le CNN classique comme premier modèle parce qu'il constitue une base de comparaison. Il permet d'évaluer les performances obtenues avec une extraction conventionnelle des caractéristiques, avant d'introduire des mécanismes d'attention ou des Transformers.
 
-Une connexion résiduelle est ensuite utilisée :
-\[
-F_{out}=F+F_{att}
-\]
+Son architecture comprend plusieurs couches de convolution, de normalisation, d'activation et de réduction de dimension. Les caractéristiques extraites sont ensuite regroupées par *Global Average Pooling*, puis transmises à des couches de classification qui prédisent l'une des sept émotions.
 
-L'objectif est de conserver les caractéristiques initiales tout en renforçant celles auxquelles le mécanisme d'attention attribue un poids élevé.
+#### 4.2.2. CNN avec attention spatiale
+Le deuxième modèle reprend l'architecture du CNN de référence et lui ajoute un mécanisme d'attention spatiale.
 
-Cette architecture permet d'étudier si une pondération spatiale améliore les performances du CNN classique.
+L'idée est simple : toutes les zones d'une image ne sont pas nécessairement aussi utiles pour reconnaître une émotion. Certaines caractéristiques peuvent être plus importantes que d'autres pour la classification.
 
-####  Vision Transformer simplifié (Tiny ViT)
+Le mécanisme d'attention apprend donc à attribuer un poids à différentes positions dans les cartes de caractéristiques produites par le CNN. Pour cela, une convolution 1 × 1 suivie d'une fonction sigmoïde génère une carte d'attention. Cette carte est ensuite multipliée par les caractéristiques extraites.
 
-Le Vision Transformer applique le mécanisme Transformer aux images.
-Contrairement à un CNN classique, il divise l'image en petites régions appelées *patches*.
-Dans notre implémentation :
-- Taille de l'image : 48 × 48 pixels.
-- Taille d'un patch : 6 × 6 pixels.
-- Nombre de patches : 64.
-- Dimension de projection : 64.
-- Nombre de têtes d'attention : 4.
-- Nombre de blocs Transformer : 2.
-- Dimension du MLP : 128.
+Une connexion résiduelle permet enfin d'ajouter les caractéristiques pondérées aux caractéristiques initiales. Le réseau conserve ainsi les informations d'origine tout en renforçant celles mises en évidence par l'attention.
 
-Chaque patch est transformé en vecteur numérique. Un encodage positionnel est ajouté afin de conserver l'information sur la position des patches.
+Ce deuxième modèle permet de répondre à une première question : **le fait d'accorder davantage d'importance à certaines régions des caractéristiques améliore-t-il la reconnaissance des émotions par rapport à un CNN classique ?**
 
-Les vecteurs sont ensuite traités par des blocs Transformer composés de :
-- Multi-Head Self-Attention ;
-- connexions résiduelles ;
-- normalisation ;
-- réseau MLP.
+#### 4.2.3. Vision Transformer simplifié (Tiny ViT)
+Le troisième modèle utilise une approche différente : le Vision Transformer, ou ViT.
 
-Une opération de Global Average Pooling est utilisée pour agréger les représentations avant la classification finale.
-Le Tiny ViT est choisi pour comparer une approche Transformer directe avec les architectures convolutionnelles.
+Alors que le CNN extrait progressivement des caractéristiques à l'aide de filtres convolutionnels, le Vision Transformer divise directement l'image en petites régions appelées *patches*. Il apprend ensuite les relations entre ces différentes régions grâce au mécanisme de *Self-Attention*.
 
-### 5.4 Modèle hybride CNN–APP–Transformer
-Cette architecture est inspirée de l'article de Xue et al. :
-*Vision Transformer with Attentive Pooling for Robust Facial Expression Recognition.*
-L'article présente APViT, une architecture qui utilise deux mécanismes de regroupement attentif :
-- Attentive Patch Pooling (APP) ;
-- Attentive Token Pooling (ATP).
+Dans notre expérience, chaque image de 48 × 48 pixels est divisée en 64 patches de 6 × 6 pixels. Chaque patch est transformé en un vecteur de dimension 64. Un encodage positionnel est ajouté pour indiquer au modèle la position de chaque patch dans l'image.
 
-L'objectif est de sélectionner les caractéristiques les plus discriminantes et de réduire l'influence des informations moins pertinentes, notamment les zones bruitées ou occluses.
+La séquence obtenue est ensuite traitée par deux blocs Transformer. Chaque bloc utilise quatre têtes d'attention, des connexions résiduelles, une normalisation et un réseau de neurones intermédiaire (*MLP*) de dimension 128.
 
-#### Adaptation réalisée dans ce projet
-Notre quatrième modèle reprend le principe d'Attentive Patch Pooling, mais utilise une architecture simplifiée adaptée à FER-2013 et aux ressources matérielles disponibles.
+Enfin, les représentations des patches sont regroupées par *Global Average Pooling* avant la classification.
 
-Son fonctionnement est le suivant :
+Nous avons choisi une version simplifiée du Vision Transformer afin de pouvoir l'entraîner directement sur FER-2013 avec des ressources informatiques limitées.
 
-**Étape 1 — Extraction des caractéristiques par CNN**
-Un petit backbone CNN transforme l'image en une carte de caractéristiques de dimension 6 × 6 × 64.
-**Étape 2 — Transformation en patches**
-La carte de caractéristiques est réorganisée en une séquence de 36 patches, chacun représenté par un vecteur de dimension 64.
-**Étape 3 — Calcul du score d'importance**
-Pour chaque patch, le modèle calcule un score à partir de la somme des valeurs absolues de ses activations sur les canaux :
-\[
-s_i=\sum_c |f_{i,c}|
-\]
+Ce troisième modèle permet de répondre à une deuxième question : **un Transformer qui apprend les relations entre les différentes régions du visage peut-il obtenir de meilleurs résultats qu'un CNN ?**
 
-**Étape 4 — Sélection attentive**
-Les 27 patches ayant les scores les plus élevés sont conservés parmi les 36 patches disponibles.
-Cette sélection correspond à une proportion de conservation de 75 %.
-**Étape 5 — Ajout du token de classification**
-Un token [CLS] entraînable est ajouté à la séquence afin de produire une représentation globale pour la classification.
-**Étape 6 — Encodage positionnel**
-Un encodage positionnel est ajouté à la séquence de tokens.
-Dans cette implémentation, les positions encodées correspondent aux rangs des patches après leur sélection, et non à leurs coordonnées spatiales originales.
-**Étape 7 — Traitement par Transformer**
-La séquence est traitée par deux blocs Transformer avec quatre têtes d'attention.
-**Étape 8 — Classification**
-La représentation du token [CLS] est utilisée par des couches denses pour prédire l'une des sept émotions.
-#### Différence avec l'architecture originale de Xue et al.
-Le modèle développé dans ce projet n'est pas une reproduction complète d'APViT.
-Il s'agit d'une adaptation expérimentale :
-- utilisation d'un backbone CNN léger entraîné depuis zéro ;
-- implémentation du principe APP ;
-- absence du module ATP ;
-- architecture Transformer réduite ;
-- adaptation à la résolution 48 × 48 et aux sept classes de FER-2013.
-Le but est d'étudier l'intérêt de la sélection attentive des patches dans un modèle hybride CNN-Transformer, et non de reproduire les résultats de l'article original.
+#### 4.2.4. Modèle hybride CNN–APP–Transformer
 
-#### Protocole expérimental
+Le quatrième modèle est inspiré des travaux de Xue et al., intitulés *Vision Transformer with Attentive Pooling for Robust Facial Expression Recognition*.
 
-Les quatre modèles sont entraînés sur le même dataset et évalués sur le dataset.
-Les paramètres communs comprennent :
+Dans cet article, les auteurs proposent APViT, une architecture qui combine l'extraction de caractéristiques par CNN avec des mécanismes de sélection attentive avant et pendant le traitement par Transformer.
 
-- Taille d'entrée : 48 × 48 × 1.
-- Batch size : 32.
-- Nombre maximal d'époques : 10.
-- Optimiseur : Adam.
-- Fonction de perte : Sparse Categorical Crossentropy.
-- Métrique suivie pendant l'entraînement : Accuracy.
-- Pondération des classes pendant l'entraînement.
-- Data augmentation.
-- Early Stopping.
-- ReduceLROnPlateau.
+L'idée principale est que toutes les informations extraites d'un visage ne sont pas forcément utiles à la reconnaissance d'une émotion. Certaines régions peuvent être moins discriminantes ou contenir des informations perturbatrices. Il peut donc être intéressant de sélectionner les caractéristiques les plus pertinentes avant de les transmettre au Transformer.
 
-Les modèles utilisent une valeur initiale de learning rate de 0.0005.
-Les callbacks sont configurés avec :
-- EarlyStopping : patience de 3 époques, restauration des meilleurs poids selon `val_loss`.
-- ReduceLROnPlateau : réduction du learning rate par un facteur de 0.5 après 2 époques sans amélioration, avec un minimum de 0.00001.
-Les quatre modèles sont entraînés séparément.
+L'article présente deux mécanismes :
 
-#### Métriques d'évaluation
+- **Attentive Patch Pooling (APP)** : sélection des patches les plus informatifs à partir des caractéristiques extraites par le CNN.
+- **Attentive Token Pooling (ATP)** : sélection des tokens les plus utiles au cours du traitement par Transformer.
 
-Trois métriques principales sont utilisées.
-### Accuracy
-L'accuracy représente la proportion de prédictions correctes parmi toutes les images testées.
+Dans notre projet, nous reprenons le principe d'APP dans une version simplifiée, adaptée à FER-2013 et aux ressources matérielles disponibles.
 
-### Macro F1-score
-Le macro F1-score calcule le F1-score de chaque classe puis effectue une moyenne non pondérée.
-Cette métrique est particulièrement utile lorsque les classes sont déséquilibrées, car chaque émotion contribue de manière égale au résultat final.
+Le fonctionnement du modèle se déroule en plusieurs étapes :
 
-### Weighted F1-score
-Le weighted F1-score calcule une moyenne des F1-scores par classe pondérée par le nombre d'images de chaque classe.
-Il tient donc compte de la distribution réelle des classes.
+1. **Extraction des caractéristiques :** un petit CNN analyse l'image et produit une carte de caractéristiques de dimension 6 × 6 × 64.
+2. **Création des patches :** cette carte est transformée en une séquence de 36 patches, chacun représenté par un vecteur de 64 valeurs.
+3. **Évaluation de l'importance :** pour chaque patch, un score est calculé en additionnant les valeurs absolues de ses caractéristiques. Ce score sert à estimer son importance.
+4. **Sélection des patches :** les 27 patches ayant les scores les plus élevés sont conservés. Cela représente 75 % des patches initiaux.
+5. **Ajout d'un token de classification :** un token spécial, appelé `[CLS]`, est ajouté à la séquence. Il servira à construire la représentation utilisée pour prédire l'émotion.
+6. **Encodage positionnel :** des informations de position sont ajoutées aux tokens sélectionnés.
+7. **Traitement par Transformer :** la séquence est analysée par deux blocs Transformer utilisant quatre têtes d'attention.
+8. **Classification :** la représentation du token `[CLS]` est transmise aux couches finales pour prédire l'une des sept émotions.
+
+Cette architecture cherche donc à combiner deux avantages : la capacité du CNN à extraire des caractéristiques locales du visage et la capacité du Transformer à apprendre les relations entre les caractéristiques sélectionnées.
+
+**Différence avec l'article original :** notre modèle ne constitue pas une reproduction complète d'APViT. Nous utilisons un CNN léger entraîné depuis zéro, nous implémentons le principe APP, mais nous n'ajoutons pas le module ATP. Le Transformer est également simplifié. Il s'agit donc d'une adaptation expérimentale destinée à étudier l'intérêt de la sélection attentive des patches, et non à reproduire les performances rapportées par Xue et al.
+
+### 4.3. Logique de l'expérience et comparaison des modèles
+
+Les quatre modèles ont été choisis pour étudier progressivement différentes stratégies de reconnaissance des expressions faciales :
+
+- Le CNN classique sert de référence pour mesurer les performances d'une architecture convolutionnelle.
+- Le CNN avec attention permet de vérifier si une pondération spatiale des caractéristiques améliore cette référence.
+- Le Tiny ViT permet d'étudier une approche fondée directement sur les relations entre les patches de l'image.
+- Le modèle CNN–APP–Transformer permet d'évaluer l'intérêt de sélectionner les patches les plus informatifs avant leur traitement par un Transformer.
+
+Cette comparaison permet ainsi de mieux comprendre si les mécanismes d'attention et la sélection des caractéristiques apportent un avantage dans la reconnaissance des expressions faciales.
+
+Les modèles sont entraînés séparément avec les mêmes données d'entraînement et de validation. Ils sont ensuite évalués sur le même jeu de test.
+
+### 4.4. Critères d'évaluation
+
+Les performances sont comparées à l'aide de trois métriques : l'accuracy, le macro F1-score et le weighted F1-score.
+
+**Accuracy**
+
+L'accuracy représente la proportion d'images correctement classées parmi toutes les images du jeu de test. Elle donne une indication générale de la capacité du modèle à reconnaître les émotions.
+
+**Macro F1-score**
+
+Le macro F1-score correspond à la moyenne des F1-scores calculés séparément pour les sept émotions, sans tenir compte de leur nombre d'images. Chaque émotion possède donc la même importance dans le calcul.
+
+Cette métrique est particulièrement utile pour FER-2013, car le dataset présente un déséquilibre entre les classes. Elle permet de vérifier si un modèle reconnaît correctement les différentes émotions et pas seulement les catégories les plus représentées.
+
+**Weighted F1-score**
+
+Le weighted F1-score correspond également à une moyenne des F1-scores par émotion, mais chaque classe est pondérée selon son nombre d'images dans le jeu de test.
+
+Il permet donc d'évaluer les performances globales en tenant compte de la distribution des classes.
+
+L'utilisation de ces trois métriques permet d'obtenir une comparaison plus complète : l'accuracy mesure la proportion globale de bonnes prédictions, tandis que les deux F1-scores apportent des informations complémentaires sur la qualité de la classification des différentes émotions.
 
 ## 5. Installation
 Prérequis : **Python 3.10 à 3.13**  et `pip`.
