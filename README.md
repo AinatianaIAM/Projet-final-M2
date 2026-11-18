@@ -34,7 +34,7 @@ Le dataset présente un déséquilibre important entre les catégories. Par exem
 Pour limiter l'influence de ce déséquilibre, des poids de classes sont calculés à partir des effectifs de l'ensemble d'entraînement.
 ## 4. Méthode
 ### 4.1. Préparation des données et protocole expérimental
-Pour réaliser cette expérience, nous utilisons le dataset FER-2013, composé d'images de visages en niveaux de gris de taille 48 × 48 pixels. Chaque image appartient à l'une des sept catégories d'émotions.
+Pour réaliser cette expérience, nous utilisons le dataset FER-2013. Chaque image appartient à l'une des sept catégories d'émotions.
 
 Les images sont chargées avec `image_dataset_from_directory`, puis regroupées en lots de 32 images. Les valeurs des pixels sont normalisées entre 0 et 1 afin de faciliter l'apprentissage des modèles.
 
@@ -42,11 +42,12 @@ Le dossier d'entraînement est divisé en deux parties : 80 % des images sont ut
 
 Pour rendre les modèles moins dépendants des images exactes du jeu d'entraînement, nous appliquons également des transformations aléatoires : retournement horizontal, légère rotation et zoom. Ces transformations augmentent la diversité des exemples présentés aux modèles.
 
-Le dataset FER-2013 contient davantage d'images pour certaines émotions que pour d'autres. Pour limiter cet effet, nous utilisons une pondération des classes. Les émotions les moins représentées reçoivent un poids plus important pendant l'entraînement. La pondération est adoucie à l'aide de la racine carrée de l'inverse de la fréquence, afin d'éviter d'attribuer des poids excessifs aux classes très rares.
+Le dataset FER-2013 contient davantage d'images pour certaines émotions que pour d'autres. Pour limiter cet effet, nous utilisons une pondération des classes. Les émotions les moins représentées reçoivent un poids plus important pendant l'entraînement. 
 
-L'objectif est ensuite de comparer les quatre architectures dans un cadre expérimental aussi proche que possible. Les modèles sont entraînés séparément avec l'optimiseur Adam, un taux d'apprentissage initial de 0,0005 et la fonction de perte `sparse_categorical_crossentropy`. L'entraînement est limité à 10 époques au maximum.
+L'objectif est de comparer les quatre architectures dans un cadre expérimental aussi proche que possible.
+Les modèles sont entraînés séparément avec l'optimiseur Adam, un taux d'apprentissage initial de 0,0005 et la fonction de perte `sparse_categorical_crossentropy`. L'entraînement est limité à 10 époques au maximum.
 
-Deux mécanismes permettent d'adapter l'entraînement : `EarlyStopping` arrête celui-ci lorsque les performances de validation ne s'améliorent plus, tandis que `ReduceLROnPlateau` réduit le taux d'apprentissage lorsque la perte de validation cesse de diminuer.
+On utilise pour adapter l'entraînement : `EarlyStopping` arrête celui-ci lorsque les performances de validation ne s'améliorent plus, tandis que `ReduceLROnPlateau` réduit le taux d'apprentissage lorsque la perte de validation cesse de diminuer.
 
 ### 4.2. Choix et construction des architectures
 L'expérience repose sur quatre modèles. Leur comparaison permet d'étudier progressivement différentes façons d'extraire et d'utiliser les informations contenues dans les images faciales.
@@ -54,11 +55,11 @@ L'expérience repose sur quatre modèles. Leur comparaison permet d'étudier pro
 #### 4.2.1. CNN classique : modèle de référence
 Un réseau de neurones convolutionnel, ou CNN (*Convolutional Neural Network*), est particulièrement adapté au traitement des images. Il apprend à reconnaître des caractéristiques visuelles grâce à des filtres appliqués sur différentes régions de l'image.
 
-Dans le cas des expressions faciales, ces caractéristiques peuvent correspondre aux contours des yeux, à la forme de la bouche, aux sourcils ou encore aux plis du visage. En combinant ces informations, le réseau apprend à distinguer les différentes émotions.
+Pour les expressions faciales, ces caractéristiques peuvent être les contours des yeux,  la forme de la bouche, les sourcils ou les plis du visage. En combinant ces informations, le réseau apprend à distinguer les différentes émotions.
 
 Nous avons choisi le CNN classique comme premier modèle parce qu'il constitue une base de comparaison. Il permet d'évaluer les performances obtenues avec une extraction conventionnelle des caractéristiques, avant d'introduire des mécanismes d'attention ou des Transformers.
 
-Son architecture comprend plusieurs couches de convolution, de normalisation, d'activation et de réduction de dimension. Les caractéristiques extraites sont ensuite regroupées par *Global Average Pooling*, puis transmises à des couches de classification qui prédisent l'une des sept émotions.
+Son architecture comprend plusieurs couches de convolution, de normalisation, d'activation et de réduction de dimension. Les caractéristiques extraites sont ensuite regroupées par Global Average Pooling, puis transmises à des couches de classification qui prédisent l'une des sept émotions.
 
 #### 4.2.2. CNN avec attention spatiale
 Le deuxième modèle reprend l'architecture du CNN de référence et lui ajoute un mécanisme d'attention spatiale.
@@ -69,7 +70,6 @@ Le mécanisme d'attention apprend donc à attribuer un poids à différentes pos
 
 Une connexion résiduelle permet enfin d'ajouter les caractéristiques pondérées aux caractéristiques initiales. Le réseau conserve ainsi les informations d'origine tout en renforçant celles mises en évidence par l'attention.
 
-Ce deuxième modèle permet de répondre à une première question : **le fait d'accorder davantage d'importance à certaines régions des caractéristiques améliore-t-il la reconnaissance des émotions par rapport à un CNN classique ?**
 
 #### 4.2.3. Vision Transformer simplifié (Tiny ViT)
 Le troisième modèle utilise une approche différente : le Vision Transformer, ou ViT.
@@ -84,8 +84,6 @@ Enfin, les représentations des patches sont regroupées par *Global Average Poo
 
 Nous avons choisi une version simplifiée du Vision Transformer afin de pouvoir l'entraîner directement sur FER-2013 avec des ressources informatiques limitées.
 
-Ce troisième modèle permet de répondre à une deuxième question : **un Transformer qui apprend les relations entre les différentes régions du visage peut-il obtenir de meilleurs résultats qu'un CNN ?**
-
 #### 4.2.4. Modèle hybride CNN–APP–Transformer
 
 Le quatrième modèle est inspiré des travaux de Xue et al., intitulés *Vision Transformer with Attentive Pooling for Robust Facial Expression Recognition*.
@@ -95,7 +93,6 @@ Dans cet article, les auteurs proposent APViT, une architecture qui combine l'ex
 L'idée principale est que toutes les informations extraites d'un visage ne sont pas forcément utiles à la reconnaissance d'une émotion. Certaines régions peuvent être moins discriminantes ou contenir des informations perturbatrices. Il peut donc être intéressant de sélectionner les caractéristiques les plus pertinentes avant de les transmettre au Transformer.
 
 L'article présente deux mécanismes :
-
 - **Attentive Patch Pooling (APP)** : sélection des patches les plus informatifs à partir des caractéristiques extraites par le CNN.
 - **Attentive Token Pooling (ATP)** : sélection des tokens les plus utiles au cours du traitement par Transformer.
 
@@ -244,8 +241,7 @@ Cependant, les résultats par émotion montrent que cette amélioration n'est pa
 **Le Tiny ViT obtient les résultats les plus faibles.**
 
 Le Tiny ViT atteint une accuracy de 37,9 % et un Macro F1 de 0,294. Il est moins performant que les trois autres modèles dans notre expérience.
-
-Ce résultat peut être lié aux conditions d'entraînement. Le modèle est entraîné à partir de zéro, sans pré-entraînement, sur des images de petite taille (48 × 48 pixels) et avec un nombre limité d'époques.
+Le modèle est entraîné à partir de zéro, sans pré-entraînement, sur des images de petite taille (48 × 48 pixels) et avec un nombre limité d'epoch.
 
 Contrairement aux CNN, les Transformers ne disposent pas naturellement des mêmes mécanismes pour détecter les caractéristiques locales d'une image. Ils peuvent avoir besoin de davantage de données ou d'un pré-entraînement pour apprendre des représentations efficaces.
 
